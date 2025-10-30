@@ -59,8 +59,14 @@ static void GetHotKeyLib(unsigned int functionKeys, char* buffer, size_t bufferS
 
 */
 
-#include "imgui.h"
-#include "imgui_internal.h"
+#include "../../imgui/imgui.h"
+#include "../../imgui/imgui_internal.h"
+#include <SDL3/SDL.h>
+ImGuiKey ImGui_ImplSDL3_KeyEventToImGuiKey(SDL_Keycode keycode, SDL_Scancode scancode);//not exposed in the current interface
+static inline ImGuiKey convertSDL3KeyToImgui(SDL_Scancode scancode){
+	auto keycode = SDL_GetKeyFromScancode(scancode, SDL_KMOD_NONE, false);
+	return ImGui_ImplSDL3_KeyEventToImGuiKey(keycode, scancode);
+}
 
 namespace ImHotKey
 {
@@ -90,7 +96,7 @@ namespace ImHotKey
         { {"Ctrl", 0, 0x1D, 0xE0, 0, 60}, {"Alt", 1, 0x38, 0xE2, 68, 60}, {"Space", 77, 0x39, 0X2c, 0, 260}, {"Alt", 1, 0x38, 0xE6, 0, 60}, {"Ctrl", 0, 0x1D, 0xE4, 68, 60}, {"Left", 78, 0x4B, 0x50, 24}, {"Down", 79, 0x50, 0x51}, {"Right", 80, 0x4D, 0x52} }
     };
 
-    static const Key& GetKeyForScanCode(unsigned int scancode)
+    static inline const Key& GetKeyForScanCode(unsigned int scancode)
     {
         for (unsigned int y = 0; y < 6; y++)
         {
@@ -111,7 +117,7 @@ namespace ImHotKey
         return Keys[0][0];
     }
 
-    static unsigned int GetOrderedScanCodes(unsigned char scanCodes[4], unsigned char order[4])
+    static inline unsigned int GetOrderedScanCodes(unsigned char scanCodes[4], unsigned char order[4])
     {
         for (int pass = 0; pass < 2; pass++)
         {
@@ -126,7 +132,7 @@ namespace ImHotKey
         return (scanCodes[3] << 24) + (scanCodes[2] << 16) + (scanCodes[1] << 8) + scanCodes[0];
     }
 
-    static void HotKeySPrintf(char* buffer, size_t bufferSize, const char* fmt, ...)
+    static inline void HotKeySPrintf(char* buffer, size_t bufferSize, const char* fmt, ...)
     {
         va_list args;
         va_start(args, fmt);
@@ -134,7 +140,7 @@ namespace ImHotKey
         va_end(args);
     }
 
-    static void GetHotKeyLib(unsigned int functionKeys, char* buffer, size_t bufferSize, const char *functionLib = nullptr)
+    static inline void GetHotKeyLib(unsigned int functionKeys, char* buffer, size_t bufferSize, const char *functionLib = nullptr)
     {
         static const char* str[4] = { "%s", "%s + %s", "%s + %s +%s", "%s + %s + %s + %s" };
         static const char* strLib[4] = { "%s (%s)", "%s (%s + %s)", "%s (%s + %s +%s)", "%s (%s + %s + %s + %s)" };
@@ -167,8 +173,13 @@ namespace ImHotKey
             HotKeySPrintf(buffer, bufferSize, fmt, lib[0], lib[1], lib[2], lib[3]);
         }
     }
+    static inline char hotkeyLibSingletonBuffer[255];
+    static inline const char* GetHotKeyLibSingleton(unsigned int functionKeys, const char *functionLib = nullptr){
+		GetHotKeyLib(functionKeys, hotkeyLibSingletonBuffer, sizeof(hotkeyLibSingletonBuffer), functionLib);
+		return hotkeyLibSingletonBuffer;
+    }
 
-    static void Edit(HotKey *hotkey, size_t hotkeyCount, const char *popupModal)
+    static inline void Edit(HotKey *hotkey, size_t hotkeyCount, const char *popupModal)
     {
         static int editingHotkey = -1;
         if (!hotkeyCount)
@@ -204,7 +215,8 @@ namespace ImHotKey
 
         for (int i = 0; i < 512; i++)
         {
-            if (ImGui::IsKeyPressed(i, false))
+	    ImGuiKey convertedKey = convertSDL3KeyToImgui((SDL_Scancode)i);
+            if (ImGui::IsNamedKey(convertedKey) && ImGui::IsKeyPressed(convertedKey, false))
             {
                 int imKey;
 #ifdef SDL_h_
@@ -280,7 +292,7 @@ namespace ImHotKey
                 unsigned char order[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
                 int scanCodeCount = 0;
                 hotkey[editingHotkey].functionKeys = 0;
-                for (int i = 1; i < sizeof(keyDown); i++)
+                for (unsigned int i = 1; i < sizeof(keyDown); i++)
                 {
                     if (keyDown[i])
                     {
@@ -304,7 +316,7 @@ namespace ImHotKey
         ImGui::EndPopup();
     }
 
-    static int GetHotKey(HotKey *hotkey, size_t hotkeyCount)
+    static inline int GetHotKey(HotKey *hotkey, size_t hotkeyCount)
     {
         static unsigned int lastHotKey = 0xFFFFFFFF;
         unsigned char scanCodes[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
@@ -312,7 +324,8 @@ namespace ImHotKey
         int scanCodeCount = 0;
         for (int i = 0; i < 512; i++)
         {
-            if (ImGui::IsKeyDown(i))
+	    ImGuiKey convertedKey = convertSDL3KeyToImgui((SDL_Scancode)i);
+            if (ImGui::IsNamedKey(convertedKey) && ImGui::IsKeyDown(convertedKey))
             {
                 int imKey;
 #ifdef SDL_h_
